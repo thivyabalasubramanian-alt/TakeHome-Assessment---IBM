@@ -1,0 +1,107 @@
+================================================================================
+                     SYSTEM & INTEGRATION TEST STRATEGY PLAN
+================================================================================
+
+APPLICATION UNDER TEST: Claims Management System (Next.js UI, BFF, Claims Service,
+                        Keycloak, Kafka, Postgres, Redis)
+ENVIRONMENT:           Windows / Docker Desktop (start-infra.sh, start-app.sh)
+TARGET BUILD:          tech-assess-qa (V1.0)
+DATE:                  September 21, 2026
+
+--------------------------------------------------------------------------------
+1. CONFIRMED DEFECTS & ISSUES LOG
+--------------------------------------------------------------------------------
+
+DEFECT ID : DEF-01
+COMPONENT : UI Wizard
+SEVERITY  : Major | PRIORITY: High
+DESCRIPTION: Incident date field clears when returning to Step 1.
+EXPECTED  : Retain previously entered date value (YYYY-MM-DD).
+ACTUAL    : Field becomes empty.
+
+DEFECT ID : DEF-02
+COMPONENT : UI (Dark Mode)
+SEVERITY  : Minor | PRIORITY: Low
+DESCRIPTION: Calendar picker icon invisible in dark mode.
+EXPECTED  : Icon visible against dark background.
+ACTUAL    : Icon blends in and is unreadable.
+
+DEFECT ID : DEF-03
+COMPONENT : Admin UI
+SEVERITY  : Major | PRIORITY: Medium
+DESCRIPTION: "Update Status" dropdown text invisible in dark mode.
+EXPECTED  : Control options and text fully readable.
+ACTUAL    : Dropdown text is invisible.
+
+OBSERVATION ID: OBS-01
+COMPONENT     : Swagger UI
+DESCRIPTION   : Missing "Authorize" button for Keycloak JWT tokens. All direct
+                calls return 401. Testers must use Postman or cURL.
+
+--------------------------------------------------------------------------------
+2. SIT EXECUTION MATRIX & VERIFICATION PLAN
+--------------------------------------------------------------------------------
+
+[2.1 API & BACKEND TEST CASES]
+
+TC-API-01: Decimal Currency Boundary Check
+- Procedure : Submit a claim with three decimal places (e.g., 10.555) via UI/API.
+- Pass Criteria: API returns HTTP 400 Bad Request error. DB enforces strict 
+                 DECIMAL(12,2) scaling without silent rounding.
+
+TC-API-02: Status Transition Exception Handling
+- Procedure : Execute invalid status transition (e.g., PATCH SUBMITTED -> APPROVED).
+- Pass Criteria: System returns HTTP 400 Bad Request ("Invalid status transition")
+                 instead of unhandled HTTP 500 error.
+
+TC-API-03: Business Rule Validation Mapping
+- Procedure : Post claims with future dates (2999-01-01) or whitespace descriptions.
+- Pass Criteria: BFF maps downstream validation exceptions to HTTP 400 Bad 
+                 Request detailing specific field errors.
+
+TC-API-04: Access Control & Data Isolation
+- Procedure : Attempt GET /api/claims/{claimId} using non-owner token or fake ID.
+- Pass Criteria: Non-owner requests return HTTP 403 Forbidden; invalid IDs 
+                 return HTTP 404 Not Found.
+
+[2.2 CONCURRENCY & RELIABILITY TEST CASES]
+
+TC-CONC-01: Multi-User Context Isolation
+- Procedure : Run 50 concurrent parallel requests via k6 with alternating JWTs.
+- Pass Criteria: Zero cross-tenant data leaks. ClaimsServiceAdapter maintains 
+                 strict thread-level token isolation.
+
+TC-REL-01: Real-Time Event Reconnection
+- Procedure : Disconnect BFF service for 60s, restore connection, and trigger 
+               an admin status update.
+- Pass Criteria: UI automatically reconnects and updates view without requiring
+                 a manual page reload.
+
+[2.3 TIMEZONE & FRONTEND TEST CASES]
+
+TC-UI-01: Timezone Date Integrity
+- Procedure : Create claim on 2026-03-15 and view across UTC+, UTC, and UTC- 
+               client timezones.
+- Pass Criteria: Incident date consistently renders as "Mar 15, 2026".
+
+TC-UI-02: Filter Race-Condition Handling
+- Procedure : Apply rapid filter changes (e.g., "Approved" then "Rejected") 
+               under 3G network throttling.
+- Pass Criteria: UI displays only the result set corresponding to active filter.
+
+--------------------------------------------------------------------------------
+3. TEST AUTOMATION STRATEGY
+--------------------------------------------------------------------------------
+
+1. Unit Tests (JUnit / Vitest): Verify status transition matrix and form rules. (Not implemented)
+2. API / Integration Tests (Supertest): Validate contracts (400, 403, 404, 500).
+3. End-to-End Tests (Playwright): Validate full claimant-to-admin workflow.
+4. Concurrency Tests (k6): Verify thread-safe token isolation under load.(Not Implemented)
+
+--------------------------------------------------------------------------------
+4. QUESTIONS FOR PRODUCT OWNER
+--------------------------------------------------------------------------------
+
+1. Is transitioning status from UNDER_REVIEW back to SUBMITTED allowed?
+2. What is the designated cache expiration window for admin dashboard totals?
+3. Should decimal inputs past two places be rejected or auto-rounded at UI level?
